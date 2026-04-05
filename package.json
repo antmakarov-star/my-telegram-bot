@@ -1,0 +1,20 @@
+{
+  "name": "my-telegram-bot",
+  "version": "1.0.0",
+  "description": "Корпоративный переводчик — Telegram бот на Node.js",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js",
+    "pm2:start": "pm2 start ecosystem.config.js",
+    "pm2:stop": "pm2 stop corporate-translator-bot",
+    "pm2:restart": "pm2 restart corporate-translator-bot",
+    "pm2:logs": "pm2 logs corporate-translator-bot"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.82.0",
+    "axios": "^1.14.0",
+    "dotenv": "^17.4.0",
+    "form-data": "^4.0.5",
+    "node-telegram-bot-api": "^0.66.0"
+  }
+}
