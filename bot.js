@@ -261,6 +261,34 @@ const ROLES = {
 Отвечай на русском языке.`,
   },
 
+  task: {
+    command: '/task',
+    name: '📋 Поручение',
+    description: 'Превращает наговоренное в готовое поручение',
+    prompt: `Ты — редактор корпоративных поручений.
+
+Я наговариваю или пишу задачу в свободной форме — голосом, обрывками, разговорным языком.
+
+Твоя задача:
+1. Извлечь суть поручения
+2. Сформулировать его чётко, официально и однозначно
+3. Сохранить ответственного, срок и содержание задачи — если они упомянуты
+4. Вернуть ровно одну строку:
+
+Поручение: [текст поручения]
+
+Требования к тексту поручения:
+ • Начинается с глагола в инфинитиве (Обеспечить, Подготовить, Представить, Согласовать...)
+ • Конкретно, без воды и лишних слов
+ • Если назван срок — включить его в текст
+ • Если назван ответственный — включить его в текст
+ • Официальный, деловой стиль
+ • Одно предложение, максимум два
+
+Ничего больше не пиши — только строку "Поручение: ..."
+Без комментариев, без пояснений, без вариантов.`,
+  },
+
   prime: {
     command: '/prime',
     name: '🚀 Prime',
@@ -388,6 +416,17 @@ function roleKeyboard() {
 
 const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 
+async function askClaudeOnce(roleKey, userMessage) {
+  const role = ROLES[roleKey];
+  const response = await anthropic.messages.create({
+    model: MODEL,
+    max_tokens: 512,
+    system: role.prompt,
+    messages: [{ role: 'user', content: userMessage }],
+  });
+  return response.content[0].text;
+}
+
 async function askClaude(chatId, userMessage) {
   const role = getCurrentRole(chatId);
   addToHistory(chatId, 'user', userMessage);
@@ -462,6 +501,7 @@ function switchRole(chatId, roleKey) {
 bot.onText(/\/corporate/, (msg) => { if (!isAllowed(msg.from.id)) return; switchRole(msg.chat.id, 'corporate'); });
 bot.onText(/\/balance/,   (msg) => { if (!isAllowed(msg.from.id)) return; switchRole(msg.chat.id, 'balance'); });
 bot.onText(/\/comfort/,   (msg) => { if (!isAllowed(msg.from.id)) return; switchRole(msg.chat.id, 'comfort'); });
+bot.onText(/\/task/,      (msg) => { if (!isAllowed(msg.from.id)) return; switchRole(msg.chat.id, 'task'); });
 bot.onText(/\/prime/,     (msg) => { if (!isAllowed(msg.from.id)) return; switchRole(msg.chat.id, 'prime'); });
 
 // Inline-кнопки
@@ -524,8 +564,14 @@ bot.on('voice', async (msg) => {
     const fileLink = await bot.getFileLink(msg.voice.file_id);
     const transcript = await transcribeVoice(fileLink);
     console.log(`[voice] ${transcript}`);
-    const reply = await askClaude(chatId, transcript);
-    bot.sendMessage(chatId, `🎙 _${transcript}_\n\n${reply}`, { parse_mode: 'Markdown' });
+
+    if (roleKey === 'task') {
+      const reply = await askClaudeOnce(roleKey, transcript);
+      bot.sendMessage(chatId, reply);
+    } else {
+      const reply = await askClaude(chatId, transcript);
+      bot.sendMessage(chatId, `🎙 _${transcript}_\n\n${reply}`, { parse_mode: 'Markdown' });
+    }
   } catch (error) {
     console.error('Ошибка голосового:', error.message);
     bot.sendMessage(chatId, 'Не удалось распознать голосовое. Попробуйте ещё раз.');
@@ -547,8 +593,13 @@ bot.on('message', async (msg) => {
 
   bot.sendChatAction(chatId, 'typing');
   try {
-    const reply = await askClaude(chatId, msg.text);
-    bot.sendMessage(chatId, reply);
+    if (roleKey === 'task') {
+      const reply = await askClaudeOnce(roleKey, msg.text);
+      bot.sendMessage(chatId, reply);
+    } else {
+      const reply = await askClaude(chatId, msg.text);
+      bot.sendMessage(chatId, reply);
+    }
   } catch (error) {
     console.error('Ошибка Claude API:', error.message);
     bot.sendMessage(chatId, 'Произошла ошибка. Попробуйте ещё раз.');
