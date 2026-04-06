@@ -732,8 +732,7 @@ bot.on('voice', async (msg) => {
     if (roleKey === 'task') {
       const reply = await askClaudeOnce(roleKey, transcript);
       pendingTasks.set(chatId, reply);
-      bot.sendMessage(chatId, `🎙 _${transcript}_\n\n${reply}`, {
-        parse_mode: 'Markdown',
+      bot.sendMessage(chatId, reply, {
         reply_markup: { inline_keyboard: [[
           { text: '💾 Сохранить', callback_data: 'task_save' },
           { text: '❌ Не сохранять', callback_data: 'task_discard' },
@@ -742,6 +741,7 @@ bot.on('voice', async (msg) => {
     } else {
       const reply = await askClaude(chatId, transcript);
       bot.sendMessage(chatId, `🎙 _${transcript}_\n\n${reply}`, { parse_mode: 'Markdown' });
+
     }
   } catch (error) {
     console.error('Ошибка голосового:', error.message);
