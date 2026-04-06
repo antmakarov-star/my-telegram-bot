@@ -752,6 +752,7 @@ bot.on('voice', async (msg) => {
 // Текстовые сообщения
 bot.on('message', async (msg) => {
   if (!msg.text || msg.text.startsWith('/')) return;
+  if (/^удалить\s/i.test(msg.text)) return;
   if (!isAllowed(msg.from.id)) return;
 
   const chatId = msg.chat.id;
