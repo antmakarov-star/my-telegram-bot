@@ -201,6 +201,63 @@ async function saveTaskToGithub(category, taskText) {
   await axios.put(apiUrl, body, { headers, timeout: 10000 });
 }
 
+async function fetchTasksFromGithub() {
+  if (!GITHUB_TOKEN) throw new Error('GITHUB_TOKEN не задан');
+  const apiUrl = `https://api.github.com/repos/${GITHUB_REPO}/contents/${TASKS_FILE}`;
+  const headers = { Authorization: `token ${GITHUB_TOKEN}` };
+  try {
+    const { data } = await axios.get(apiUrl, { headers, timeout: 10000 });
+    return { content: Buffer.from(data.content, 'base64').toString('utf8'), sha: data.sha };
+  } catch (err) {
+    if (err.response?.status === 404) return { content: '', sha: null };
+    throw err;
+  }
+}
+
+function parseTasks(content) {
+  const tasks = {};
+  let currentCat = null;
+  for (const line of content.split('\n')) {
+    const catMatch = line.match(/^## (.+)$/);
+    if (catMatch) {
+      currentCat = catMatch[1].trim();
+      tasks[currentCat] = [];
+    } else if (currentCat && line.startsWith('- ')) {
+      tasks[currentCat].push(line.slice(2));
+    }
+  }
+  return tasks;
+}
+
+function buildTasksContent(tasks) {
+  let content = '';
+  for (const [cat, lines] of Object.entries(tasks)) {
+    if (lines.length === 0) continue;
+    content += `\n## ${cat}\n`;
+    for (const line of lines) content += `- ${line}\n`;
+  }
+  return content.trimStart();
+}
+
+async function deleteTasksFromGithub(category, indices) {
+  if (!GITHUB_TOKEN) throw new Error('GITHUB_TOKEN не задан');
+  const { content, sha } = await fetchTasksFromGithub();
+  if (!content) throw new Error('Файл поручений пуст или не найден');
+  const tasks = parseTasks(content);
+  if (!tasks[category]) throw new Error(`Категория "${category}" не найдена`);
+  const toDelete = new Set(indices.map(i => i - 1));
+  tasks[category] = tasks[category].filter((_, i) => !toDelete.has(i));
+  const newContent = buildTasksContent(tasks);
+  const apiUrl = `https://api.github.com/repos/${GITHUB_REPO}/contents/${TASKS_FILE}`;
+  const headers = { Authorization: `token ${GITHUB_TOKEN}`, 'Content-Type': 'application/json' };
+  await axios.put(apiUrl, {
+    message: `task: удалить из ${category}`,
+    content: Buffer.from(newContent).toString('base64'),
+    sha,
+  }, { headers, timeout: 10000 });
+  return tasks[category].length;
+}
+
 // ─── РОЛИ ────────────────────────────────────────────────────────────────────
 
 const ROLES = {
@@ -542,8 +599,46 @@ function switchRole(chatId, roleKey) {
 bot.onText(/\/corporate/, (msg) => { if (!isAllowed(msg.from.id)) return; switchRole(msg.chat.id, 'corporate'); });
 bot.onText(/\/balance/,   (msg) => { if (!isAllowed(msg.from.id)) return; switchRole(msg.chat.id, 'balance'); });
 bot.onText(/\/comfort/,   (msg) => { if (!isAllowed(msg.from.id)) return; switchRole(msg.chat.id, 'comfort'); });
-bot.onText(/\/task/,      (msg) => { if (!isAllowed(msg.from.id)) return; switchRole(msg.chat.id, 'task'); });
-bot.onText(/\/prime/,     (msg) => { if (!isAllowed(msg.from.id)) return; switchRole(msg.chat.id, 'prime'); });
+bot.onText(/\/task(?!s)\b/, (msg) => { if (!isAllowed(msg.from.id)) return; switchRole(msg.chat.id, 'task'); });
+bot.onText(/\/prime/,      (msg) => { if (!isAllowed(msg.from.id)) return; switchRole(msg.chat.id, 'prime'); });
+
+// /tasks — показать все поручения
+bot.onText(/\/tasks/, async (msg) => {
+  if (!isAllowed(msg.from.id)) return;
+  const chatId = msg.chat.id;
+  try {
+    const { content } = await fetchTasksFromGithub();
+    if (!content.trim()) return bot.sendMessage(chatId, 'Поручений нет.');
+    const tasks = parseTasks(content);
+    let text = '📋 *Поручения*\n';
+    for (const [cat, lines] of Object.entries(tasks)) {
+      if (!lines.length) continue;
+      text += `\n*${cat}*\n`;
+      lines.forEach((line, i) => { text += `${i + 1}. ${line}\n`; });
+    }
+    text += '\n_Для удаления: удалить Еда 1,2,3_';
+    bot.sendMessage(chatId, text, { parse_mode: 'Markdown' });
+  } catch (err) {
+    console.error('Ошибка /tasks:', err.message);
+    bot.sendMessage(chatId, 'Ошибка при загрузке поручений.');
+  }
+});
+
+// удалить <Категория> <номера> — удалить поручения
+bot.onText(/^удалить (.+?) ([\d,\s]+)$/i, async (msg, match) => {
+  if (!isAllowed(msg.from.id)) return;
+  const chatId = msg.chat.id;
+  const category = match[1].trim();
+  const indices = match[2].split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n > 0);
+  if (!indices.length) return bot.sendMessage(chatId, 'Укажите номера: удалить Еда 1,2,3');
+  try {
+    const remaining = await deleteTasksFromGithub(category, indices);
+    bot.sendMessage(chatId, `✅ Удалено ${indices.length} поруч. из *${category}*. Осталось: ${remaining}`, { parse_mode: 'Markdown' });
+  } catch (err) {
+    console.error('Ошибка удаления:', err.message);
+    bot.sendMessage(chatId, `Ошибка: ${err.message}`);
+  }
+});
 
 // Inline-кнопки
 bot.on('callback_query', async (query) => {
