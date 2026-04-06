@@ -788,3 +788,4 @@ bot.on('polling_error', (error) => {
 });
 
 console.log('Бот запущен. Роли: ' + Object.keys(ROLES).join(', '));
+console.log('GITHUB_TOKEN:', GITHUB_TOKEN ? `задан (${GITHUB_TOKEN.length} символов)` : 'НЕ ЗАДАН');
