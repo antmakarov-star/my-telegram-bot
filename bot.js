@@ -7,7 +7,12 @@ const FormData = require('form-data');
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+const GITHUB_REPO = process.env.GITHUB_REPO || 'antmakarov-star/my-telegram-bot';
+const TASKS_FILE = 'tasks.md';
 const MODEL = 'claude-haiku-4-5-20251001';
+
+const TASK_CATEGORIES = ['Еда', 'Печь', 'Кофе', 'Операции', 'Проекты'];
 
 // Белый список пользователей
 const ALLOWED_IDS = process.env.ALLOWED_USER_IDS
@@ -159,6 +164,41 @@ async function calculateBalance() {
 
 function formatMoney(n) {
   return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+}
+
+// ─── GITHUB TASKS ─────────────────────────────────────────────────────────────
+
+async function saveTaskToGithub(category, taskText) {
+  if (!GITHUB_TOKEN) throw new Error('GITHUB_TOKEN не задан');
+  const apiUrl = `https://api.github.com/repos/${GITHUB_REPO}/contents/${TASKS_FILE}`;
+  const headers = { Authorization: `token ${GITHUB_TOKEN}`, 'Content-Type': 'application/json' };
+
+  let currentContent = '';
+  let sha = null;
+  try {
+    const { data } = await axios.get(apiUrl, { headers, timeout: 10000 });
+    currentContent = Buffer.from(data.content, 'base64').toString('utf8');
+    sha = data.sha;
+  } catch (err) {
+    if (err.response?.status !== 404) throw err;
+  }
+
+  const date = new Date().toLocaleDateString('ru-RU');
+  const line = `- [${date}] ${taskText}`;
+  const sectionHeader = `## ${category}`;
+
+  if (currentContent.includes(sectionHeader)) {
+    currentContent = currentContent.replace(
+      new RegExp(`(${sectionHeader}\\n)`),
+      `$1${line}\n`
+    );
+  } else {
+    currentContent = currentContent.trimEnd() + `\n\n${sectionHeader}\n${line}\n`;
+  }
+
+  const body = { message: `task: ${category}`, content: Buffer.from(currentContent).toString('base64') };
+  if (sha) body.sha = sha;
+  await axios.put(apiUrl, body, { headers, timeout: 10000 });
 }
 
 // ─── РОЛИ ────────────────────────────────────────────────────────────────────
@@ -375,9 +415,10 @@ const DEFAULT_ROLE = 'corporate';
 
 // ─── СОСТОЯНИЕ ПОЛЬЗОВАТЕЛЕЙ ─────────────────────────────────────────────────
 
-const userHistory = new Map();
-const userRole    = new Map();
-const MAX_HISTORY = 20;
+const userHistory    = new Map();
+const userRole       = new Map();
+const pendingTasks   = new Map(); // chatId -> taskText (ожидает решения о сохранении)
+const MAX_HISTORY    = 20;
 
 function getHistory(chatId) {
   if (!userHistory.has(chatId)) userHistory.set(chatId, []);
@@ -505,14 +546,42 @@ bot.onText(/\/task/,      (msg) => { if (!isAllowed(msg.from.id)) return; switch
 bot.onText(/\/prime/,     (msg) => { if (!isAllowed(msg.from.id)) return; switchRole(msg.chat.id, 'prime'); });
 
 // Inline-кнопки
-bot.on('callback_query', (query) => {
+bot.on('callback_query', async (query) => {
   if (!isAllowed(query.from.id)) return bot.answerCallbackQuery(query.id);
   const chatId = query.message.chat.id;
+  const msgId  = query.message.message_id;
+
   if (query.data.startsWith('role:')) {
     const roleKey = query.data.split(':')[1];
     if (ROLES[roleKey]) {
       switchRole(chatId, roleKey);
       bot.answerCallbackQuery(query.id);
+    }
+
+  } else if (query.data === 'task_save') {
+    await bot.answerCallbackQuery(query.id);
+    await bot.editMessageReplyMarkup({
+      inline_keyboard: TASK_CATEGORIES.map(cat => ([{ text: cat, callback_data: `task_cat:${cat}` }])),
+    }, { chat_id: chatId, message_id: msgId });
+
+  } else if (query.data === 'task_discard') {
+    pendingTasks.delete(chatId);
+    await bot.answerCallbackQuery(query.id, { text: 'Не сохранено' });
+    await bot.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatId, message_id: msgId });
+
+  } else if (query.data.startsWith('task_cat:')) {
+    const category = query.data.split(':')[1];
+    const taskText = pendingTasks.get(chatId);
+    if (!taskText) return bot.answerCallbackQuery(query.id, { text: 'Задача не найдена' });
+    pendingTasks.delete(chatId);
+    await bot.answerCallbackQuery(query.id, { text: `Сохраняю в ${category}...` });
+    await bot.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatId, message_id: msgId });
+    try {
+      await saveTaskToGithub(category, taskText);
+      bot.sendMessage(chatId, `✅ Сохранено в *${category}*`, { parse_mode: 'Markdown' });
+    } catch (err) {
+      console.error('Ошибка сохранения:', err.message);
+      bot.sendMessage(chatId, `Ошибка при сохранении: ${err.message}`);
     }
   }
 });
@@ -567,7 +636,14 @@ bot.on('voice', async (msg) => {
 
     if (roleKey === 'task') {
       const reply = await askClaudeOnce(roleKey, transcript);
-      bot.sendMessage(chatId, reply);
+      pendingTasks.set(chatId, reply);
+      bot.sendMessage(chatId, `🎙 _${transcript}_\n\n${reply}`, {
+        parse_mode: 'Markdown',
+        reply_markup: { inline_keyboard: [[
+          { text: '💾 Сохранить', callback_data: 'task_save' },
+          { text: '❌ Не сохранять', callback_data: 'task_discard' },
+        ]]},
+      });
     } else {
       const reply = await askClaude(chatId, transcript);
       bot.sendMessage(chatId, `🎙 _${transcript}_\n\n${reply}`, { parse_mode: 'Markdown' });
@@ -595,7 +671,13 @@ bot.on('message', async (msg) => {
   try {
     if (roleKey === 'task') {
       const reply = await askClaudeOnce(roleKey, msg.text);
-      bot.sendMessage(chatId, reply);
+      pendingTasks.set(chatId, reply);
+      bot.sendMessage(chatId, reply, {
+        reply_markup: { inline_keyboard: [[
+          { text: '💾 Сохранить', callback_data: 'task_save' },
+          { text: '❌ Не сохранять', callback_data: 'task_discard' },
+        ]]},
+      });
     } else {
       const reply = await askClaude(chatId, msg.text);
       bot.sendMessage(chatId, reply);
