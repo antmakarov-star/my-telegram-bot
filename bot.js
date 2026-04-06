@@ -602,8 +602,8 @@ bot.onText(/\/comfort/,   (msg) => { if (!isAllowed(msg.from.id)) return; switch
 bot.onText(/\/task(?!s)\b/, (msg) => { if (!isAllowed(msg.from.id)) return; switchRole(msg.chat.id, 'task'); });
 bot.onText(/\/prime/,      (msg) => { if (!isAllowed(msg.from.id)) return; switchRole(msg.chat.id, 'prime'); });
 
-// /tasks — показать все поручения
-bot.onText(/\/tasks/, async (msg) => {
+// /list — показать все поручения
+bot.onText(/\/list/, async (msg) => {
   if (!isAllowed(msg.from.id)) return;
   const chatId = msg.chat.id;
   try {
@@ -619,7 +619,7 @@ bot.onText(/\/tasks/, async (msg) => {
     text += '\n_Для удаления: удалить Еда 1,2,3_';
     bot.sendMessage(chatId, text, { parse_mode: 'Markdown' });
   } catch (err) {
-    console.error('Ошибка /tasks:', err.message);
+    console.error('Ошибка /list:', err.message);
     bot.sendMessage(chatId, 'Ошибка при загрузке поручений.');
   }
 });
