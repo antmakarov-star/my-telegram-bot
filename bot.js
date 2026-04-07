@@ -268,6 +268,25 @@ function blogActionKeyboard() {
   };
 }
 
+// Системный промпт блога в формате для prompt caching
+const BLOG_SYSTEM_CACHED = [
+  {
+    type: 'text',
+    text: BLOG_SYSTEM_PROMPT,
+    cache_control: { type: 'ephemeral' },
+  },
+];
+
+async function callBlogClaude(instruction) {
+  const response = await anthropic.messages.create({
+    model: MODEL,
+    max_tokens: 2048,
+    system: BLOG_SYSTEM_CACHED,
+    messages: [{ role: 'user', content: instruction }],
+  });
+  return response.content[0].text;
+}
+
 async function runBlogRequest(chatId, userText) {
   const mode = userBlogMode.get(chatId) || 'edit';
   let instruction;
@@ -285,13 +304,7 @@ async function runBlogRequest(chatId, userText) {
       instruction = `Предложи 6–8 вариантов заголовков для этого поста. Разные подходы: парадокс, конфликт, признание, жёсткое утверждение, провокация. Под каждым — одна строка почему он работает:\n\n${userText}`;
       break;
   }
-  const response = await anthropic.messages.create({
-    model: MODEL,
-    max_tokens: 2048,
-    system: BLOG_SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: instruction }],
-  });
-  const result = response.content[0].text;
+  const result = await callBlogClaude(instruction);
   lastBlogOutput.set(chatId, result);
   return result;
 }
@@ -303,13 +316,7 @@ async function improveBlogOutput(chatId) {
   const instruction = mode === 'check'
     ? `Теперь перепиши текст, исправив все замечания из своего предыдущего анализа. Верни готовый пост:\n\n${prev}`
     : `Улучши этот текст: сделай плотнее, добавь конкретики, усиль финал, убери лишние слова. Сохрани стиль и подпись:\n\n${prev}`;
-  const response = await anthropic.messages.create({
-    model: MODEL,
-    max_tokens: 2048,
-    system: BLOG_SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: instruction }],
-  });
-  const result = response.content[0].text;
+  const result = await callBlogClaude(instruction);
   lastBlogOutput.set(chatId, result);
   return result;
 }
