@@ -166,6 +166,154 @@ function formatMoney(n) {
   return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 }
 
+// ─── БЛОГ ─────────────────────────────────────────────────────────────────────
+
+const BLOG_SYSTEM_PROMPT = `Ты — редактор и соавтор личного блога Антона Макарова (t.me/makarovtyping).
+
+СТИЛЬ: Зрелый, наблюдательный, предпринимательская оптика. Тексты строятся от частного к общему: бытовая сцена → вывод о рынке, деньгах или жизни → личная позиция. Скепсис к «быстрым решениям» и инфошуму. Читается как разговор человека, который платил цену за решения. Мало слов, много смысла. Скрытая ирония без попытки понравиться. Больше «фактуры риска»: конкретные цифры, кейсы, микро-сцены из переговоров.
+
+ГОЛОС: Спокойный, уверенный. Не учит — делится. Не продаёт — фиксирует наблюдения. Разговор с равным. Редкие жёсткие формулировки после спокойного блока. Иногда «я ошибся», «я заплатил за это» — это усиливает доверие.
+
+ТОН: Разговорный с профессиональной точностью. Без официоза, но с ощущением компетенции. Юмор сухой, ироничный. Чередовать мягкое рассуждение с холодной констатацией.
+
+РИТМ: Короткие и средние предложения. Абзацы 2–4 строки. Ступенчатое развитие: тезис → уточнение → переворот смысла. Ударные короткие предложения в конце абзацев. Одиночные строки как смысловые удары. После плотного абзаца — одна короткая фраза.
+
+ТИРЕ: Длинное (—) ТОЛЬКО как разделитель блоков — отдельной строкой, без текста рядом. Внутри предложений — только короткое (-).
+
+СТРУКТУРА:
+1. Заголовок — напряжение смысла, парадокс или конфликт. До 12 слов. Без «5 способов» и «как стать».
+2. Открытие — первая фраза до 10 слов. Личная сцена, признание или наблюдение. Никаких разгонов.
+3. История/факт — конкретика, кейс, цифры. Одна сцена лучше нескольких размазанных.
+4. Раскрытие — где была иллюзия, в чём закономерность.
+5. Обобщение — 1–2 абзаца, без академичности, простые формулировки.
+6. Личная позиция — коротко от первого лица, не поучать.
+7. Концовка — жёсткая, честная. Фиксирует, не объясняет. После — афоризм отдельной строкой.
+8. Подпись: «пока Макаров печатает..»
+
+ЗАПРЕЩЕНО: заголовки H2/H3 внутри текста, вводные фразы («В этой статье...», «Сегодня поговорим...»), мотивационные клише, «успешный успех», абстракции без фактуры.
+
+ДЛИНА: 2200–2500 знаков (5–9 абзацев). Короткие посты: 800–1500.
+
+ЭТАЛОННЫЕ ПОСТЫ (ориентир, не шаблон):
+
+--- Пост: Зачем быть (ультра)богатым? ---
+Пару месяцев назад подписчик задал мне вопрос, от которого я пребываю в шоке до сих пор: «Антон, нужно ли переезжать в Москву, чтобы зарабатывать действительно большие деньги (от 10 млн/мес) или можно это сделать и в родных пенатах?»
+
+Родной, ну зачем?!
+
+—
+
+Хочется сразу сказать, что он не по адресу — не показываю свою ламбу не потому, что не хочу хвастать, а потому что у меня ее нет. Мол, кажется очевидным: если хочешь попасть в NBA, то стоит не с дворовыми ребятами мяч бросать, а в секцию идти. А вот что я хотел сказать на самом деле — в NBA и после секции не попасть.
+
+—
+
+Соцсети давно превратили богатство в ситком — с плохими актёрами и повторяющимися шутками. Миллениалам продали идею, что получать восьмизначные чеки — нормально. Это чушь для ясли-сада.
+
+—
+
+Потому что счастье — это разница между ожиданием и реальностью. Везде, где сумма положительная — тебе хорошо. А когда отрицательная — фрустрация, забвение и смерть.
+
+Быть нормальным — здорово
+пока Макаров печатает..
+
+--- Пост: Бросать дротики ---
+Чемпиона от посредственности отличает только количество попыток и отношение к неудачам. Там, где один забьёт болт, другой будет продолжать пытаться.
+
+—
+
+В юности мне пришлось пройти всю школу продаж от и до. Я начинал с холодных звонков людям, которые не хотели меня слушать, и закончил руководителем отдела, которого посылали уже оптом. Это было противоестественно. Зато я сто раз убедился: если не бросать, рано или поздно получится.
+
+—
+
+Это метафора про тестирование гипотез, где самое важное — скорость. Новички берут один дротик, долго метятся, бросают, потом долго рефлексируют. Профи берут дротик и бросают, сразу следующий — и снова бросают. Лишь после десятка попыток анализируют и корректируют.
+
+—
+
+Моя задача — не бросить точнее всех, а бросить как можно больше. Пусть 99% мимо — достаточно одного попадания, чтобы перевернуть игру.
+
+Рано или поздно попадёшь
+пока Макаров печатает..
+
+Отвечай только на русском языке.`;
+
+const BLOG_MODES = {
+  draft:  { name: '✍️ Написать с нуля',    hint: 'Напиши тему или идею — я напишу пост в твоём стиле.' },
+  edit:   { name: '✏️ Улучшить черновик',   hint: 'Отправь черновик — я доработаю его в стиле блога.' },
+  check:  { name: '🔍 Проверить стиль',     hint: 'Отправь текст — проверю на соответствие стилю и укажу что исправить.' },
+  titles: { name: '📝 Варианты заголовков', hint: 'Отправь текст поста — предложу 6–8 заголовков.' },
+};
+
+const lastBlogOutput = new Map(); // chatId -> последний ответ блог-редактора
+const userBlogMode   = new Map(); // chatId -> 'draft' | 'edit' | 'check' | 'titles'
+
+function blogSubKeyboard() {
+  return {
+    reply_markup: {
+      inline_keyboard: Object.entries(BLOG_MODES).map(([key, mode]) => ([{
+        text: mode.name,
+        callback_data: `blog_mode:${key}`,
+      }])),
+    },
+  };
+}
+
+function blogActionKeyboard() {
+  return {
+    reply_markup: {
+      inline_keyboard: [[
+        { text: '🔄 Улучшить ещё раз', callback_data: 'blog_improve' },
+        { text: '✅ Готово',            callback_data: 'blog_done' },
+      ]],
+    },
+  };
+}
+
+async function runBlogRequest(chatId, userText) {
+  const mode = userBlogMode.get(chatId) || 'edit';
+  let instruction;
+  switch (mode) {
+    case 'draft':
+      instruction = `Напиши полный пост в стиле блога на тему: "${userText}". Следуй всем правилам стиля, структуры и длины.`;
+      break;
+    case 'edit':
+      instruction = `Улучши этот черновик, сохраняя смысл автора, но приводя к стилю блога. Не теряй личные детали и факты:\n\n${userText}`;
+      break;
+    case 'check':
+      instruction = `Проверь этот текст на соответствие стилю блога. Укажи конкретно что нарушено (с цитатами из текста) и как исправить. В конце — общая оценка:\n\n${userText}`;
+      break;
+    case 'titles':
+      instruction = `Предложи 6–8 вариантов заголовков для этого поста. Разные подходы: парадокс, конфликт, признание, жёсткое утверждение, провокация. Под каждым — одна строка почему он работает:\n\n${userText}`;
+      break;
+  }
+  const response = await anthropic.messages.create({
+    model: MODEL,
+    max_tokens: 2048,
+    system: BLOG_SYSTEM_PROMPT,
+    messages: [{ role: 'user', content: instruction }],
+  });
+  const result = response.content[0].text;
+  lastBlogOutput.set(chatId, result);
+  return result;
+}
+
+async function improveBlogOutput(chatId) {
+  const prev = lastBlogOutput.get(chatId);
+  if (!prev) return null;
+  const mode = userBlogMode.get(chatId) || 'edit';
+  const instruction = mode === 'check'
+    ? `Теперь перепиши текст, исправив все замечания из своего предыдущего анализа. Верни готовый пост:\n\n${prev}`
+    : `Улучши этот текст: сделай плотнее, добавь конкретики, усиль финал, убери лишние слова. Сохрани стиль и подпись:\n\n${prev}`;
+  const response = await anthropic.messages.create({
+    model: MODEL,
+    max_tokens: 2048,
+    system: BLOG_SYSTEM_PROMPT,
+    messages: [{ role: 'user', content: instruction }],
+  });
+  const result = response.content[0].text;
+  lastBlogOutput.set(chatId, result);
+  return result;
+}
+
 // ─── ДИВИДЕНДЫ ────────────────────────────────────────────────────────────────
 
 async function fetchDividends(ticker) {
@@ -593,10 +741,13 @@ function setRole(chatId, roleKey) {
 function roleKeyboard() {
   return {
     reply_markup: {
-      inline_keyboard: Object.entries(ROLES).map(([key, role]) => ([{
-        text: role.name,
-        callback_data: `role:${key}`,
-      }])),
+      inline_keyboard: [
+        ...Object.entries(ROLES).map(([key, role]) => ([{
+          text: role.name,
+          callback_data: `role:${key}`,
+        }])),
+        [{ text: '📝 Блог', callback_data: 'blog_menu' }],
+      ],
     },
   };
 }
@@ -693,6 +844,13 @@ bot.onText(/\/comfort/,   (msg) => { if (!isAllowed(msg.from.id)) return; switch
 bot.onText(/\/task(?!s)\b/, (msg) => { if (!isAllowed(msg.from.id)) return; switchRole(msg.chat.id, 'task'); });
 bot.onText(/\/prime/,      (msg) => { if (!isAllowed(msg.from.id)) return; switchRole(msg.chat.id, 'prime'); });
 
+// /blog — открыть меню блога
+bot.onText(/\/blog/, (msg) => {
+  if (!isAllowed(msg.from.id)) return;
+  userRole.set(msg.chat.id, 'blog');
+  bot.sendMessage(msg.chat.id, '📝 *Блог — выбери режим:*', { parse_mode: 'Markdown', ...blogSubKeyboard() });
+});
+
 // /divs — дивиденды по портфелю
 bot.onText(/\/divs/, (msg) => {
   if (!isAllowed(msg.from.id)) return;
@@ -743,7 +901,37 @@ bot.on('callback_query', async (query) => {
   const chatId = query.message.chat.id;
   const msgId  = query.message.message_id;
 
-  if (query.data.startsWith('role:')) {
+  if (query.data === 'blog_menu') {
+    userRole.set(chatId, 'blog');
+    await bot.answerCallbackQuery(query.id);
+    bot.sendMessage(chatId, '📝 *Блог — выбери режим:*', { parse_mode: 'Markdown', ...blogSubKeyboard() });
+
+  } else if (query.data.startsWith('blog_mode:')) {
+    const mode = query.data.split(':')[1];
+    userRole.set(chatId, 'blog');
+    userBlogMode.set(chatId, mode);
+    lastBlogOutput.delete(chatId);
+    await bot.answerCallbackQuery(query.id);
+    bot.sendMessage(chatId, BLOG_MODES[mode].hint);
+
+  } else if (query.data === 'blog_improve') {
+    await bot.answerCallbackQuery(query.id, { text: 'Улучшаю...' });
+    bot.sendChatAction(chatId, 'typing');
+    try {
+      const result = await improveBlogOutput(chatId);
+      if (!result) return bot.sendMessage(chatId, 'Нет текста для улучшения. Отправь черновик заново.');
+      await bot.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatId, message_id: msgId });
+      bot.sendMessage(chatId, result, blogActionKeyboard());
+    } catch (err) {
+      console.error('Ошибка blog_improve:', err.message);
+      bot.sendMessage(chatId, 'Ошибка. Попробуй ещё раз.');
+    }
+
+  } else if (query.data === 'blog_done') {
+    await bot.answerCallbackQuery(query.id, { text: 'Готово!' });
+    bot.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatId, message_id: msgId });
+
+  } else if (query.data.startsWith('role:')) {
     const roleKey = query.data.split(':')[1];
     if (ROLES[roleKey]) {
       switchRole(chatId, roleKey);
@@ -810,10 +998,7 @@ bot.on('voice', async (msg) => {
 
   const roleKey = userRole.get(chatId) || DEFAULT_ROLE;
 
-  // В режиме баланса — голосовые не нужны, пересчитываем
-  if (roleKey === 'balance') {
-    return runBalanceCalculation(chatId);
-  }
+  if (roleKey === 'balance') return runBalanceCalculation(chatId);
 
   bot.sendChatAction(chatId, 'typing');
 
@@ -826,7 +1011,10 @@ bot.on('voice', async (msg) => {
     const transcript = await transcribeVoice(fileLink);
     console.log(`[voice] ${transcript}`);
 
-    if (roleKey === 'task') {
+    if (roleKey === 'blog') {
+      const reply = await runBlogRequest(chatId, transcript);
+      bot.sendMessage(chatId, `🎙 _${transcript}_\n\n${reply}`, { parse_mode: 'Markdown', ...blogActionKeyboard() });
+    } else if (roleKey === 'task') {
       const reply = await askClaudeOnce(roleKey, transcript);
       pendingTasks.set(chatId, reply);
       bot.sendMessage(chatId, reply, {
@@ -838,7 +1026,6 @@ bot.on('voice', async (msg) => {
     } else {
       const reply = await askClaude(chatId, transcript);
       bot.sendMessage(chatId, `🎙 _${transcript}_\n\n${reply}`, { parse_mode: 'Markdown' });
-
     }
   } catch (error) {
     console.error('Ошибка голосового:', error.message);
@@ -855,14 +1042,14 @@ bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   const roleKey = userRole.get(chatId) || DEFAULT_ROLE;
 
-  // В режиме баланса — любое сообщение пересчитывает портфель
-  if (roleKey === 'balance') {
-    return runBalanceCalculation(chatId);
-  }
+  if (roleKey === 'balance') return runBalanceCalculation(chatId);
 
   bot.sendChatAction(chatId, 'typing');
   try {
-    if (roleKey === 'task') {
+    if (roleKey === 'blog') {
+      const reply = await runBlogRequest(chatId, msg.text);
+      bot.sendMessage(chatId, reply, blogActionKeyboard());
+    } else if (roleKey === 'task') {
       const reply = await askClaudeOnce(roleKey, msg.text);
       pendingTasks.set(chatId, reply);
       bot.sendMessage(chatId, reply, {
