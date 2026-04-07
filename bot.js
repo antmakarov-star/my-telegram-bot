@@ -166,6 +166,97 @@ function formatMoney(n) {
   return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 }
 
+// ─── ДИВИДЕНДЫ ────────────────────────────────────────────────────────────────
+
+async function fetchDividends(ticker) {
+  const url = `https://iss.moex.com/iss/securities/${ticker}/dividends.json?iss.meta=off`;
+  const { data } = await axios.get(url, { timeout: 10000 });
+  const cols = data.dividends.columns;
+  return data.dividends.data.map(row => {
+    const obj = {};
+    cols.forEach((col, i) => { obj[col] = row[i]; });
+    return obj;
+  });
+}
+
+async function calculateDividends() {
+  const stocks = PORTFOLIO.filter(s => s.type === 'stock');
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const oneYearAgo = new Date(today);
+  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+
+  const results = await Promise.allSettled(stocks.map(s => fetchDividends(s.ticker)));
+
+  const upcoming = [];
+  const recent = [];
+
+  stocks.forEach((sec, i) => {
+    if (results[i].status !== 'fulfilled') return;
+    for (const div of results[i].value) {
+      if (!div.registryclosedate || !div.value) continue;
+      const date = new Date(div.registryclosedate);
+      const entry = {
+        name: sec.name,
+        ticker: sec.ticker,
+        qty: sec.qty,
+        date,
+        dateStr: div.registryclosedate,
+        perShare: div.value,
+        payout: div.value * sec.qty,
+        currency: div.currencyid || 'RUB',
+      };
+      if (date >= today) upcoming.push(entry);
+      else if (date >= oneYearAgo) recent.push(entry);
+    }
+  });
+
+  upcoming.sort((a, b) => a.date - b.date);
+  recent.sort((a, b) => b.date - a.date);
+  return { upcoming, recent };
+}
+
+async function runDividendsCalculation(chatId) {
+  const loadingMsg = await bot.sendMessage(chatId, '⏳ Загружаю дивиденды с MOEX...');
+  try {
+    const { upcoming, recent } = await calculateDividends();
+    let text = '*💰 Дивиденды по портфелю*\n';
+
+    if (upcoming.length > 0) {
+      const total = upcoming.filter(d => d.currency === 'RUB').reduce((s, d) => s + d.payout, 0);
+      text += '\n*Предстоящие выплаты:*\n';
+      for (const d of upcoming) {
+        text += `• ${d.name} — ${d.dateStr}\n  ${d.perShare} ₽/акц × ${d.qty} = *${formatMoney(d.payout)} ₽*\n`;
+      }
+      if (total > 0) text += `\n*Итого к получению: ${formatMoney(total)} ₽*\n`;
+    } else {
+      text += '\n_Предстоящих дивидендов нет_\n';
+    }
+
+    if (recent.length > 0) {
+      const total = recent.filter(d => d.currency === 'RUB').reduce((s, d) => s + d.payout, 0);
+      text += '\n*За последний год:*\n';
+      for (const d of recent.slice(0, 10)) {
+        text += `• ${d.name} (${d.dateStr}) — ${formatMoney(d.payout)} ₽\n`;
+      }
+      if (recent.length > 10) text += `_...и ещё ${recent.length - 10}_\n`;
+      if (total > 0) text += `\n*Получено за год: ${formatMoney(total)} ₽*\n`;
+    }
+
+    await bot.editMessageText(text, {
+      chat_id: chatId,
+      message_id: loadingMsg.message_id,
+      parse_mode: 'Markdown',
+    });
+  } catch (err) {
+    console.error('Ошибка /divs:', err.message);
+    bot.editMessageText('Ошибка при получении данных о дивидендах. Попробуйте позже.', {
+      chat_id: chatId,
+      message_id: loadingMsg.message_id,
+    });
+  }
+}
+
 // ─── GITHUB TASKS ─────────────────────────────────────────────────────────────
 
 async function saveTaskToGithub(category, taskText) {
@@ -601,6 +692,12 @@ bot.onText(/\/balance/,   (msg) => { if (!isAllowed(msg.from.id)) return; switch
 bot.onText(/\/comfort/,   (msg) => { if (!isAllowed(msg.from.id)) return; switchRole(msg.chat.id, 'comfort'); });
 bot.onText(/\/task(?!s)\b/, (msg) => { if (!isAllowed(msg.from.id)) return; switchRole(msg.chat.id, 'task'); });
 bot.onText(/\/prime/,      (msg) => { if (!isAllowed(msg.from.id)) return; switchRole(msg.chat.id, 'prime'); });
+
+// /divs — дивиденды по портфелю
+bot.onText(/\/divs/, (msg) => {
+  if (!isAllowed(msg.from.id)) return;
+  runDividendsCalculation(msg.chat.id);
+});
 
 // /list — показать все поручения
 bot.onText(/\/list/, async (msg) => {
